@@ -70,7 +70,7 @@ fi
 # Make and install busybox
 make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
 make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install
-cd rootfs
+cd $OUTDIR/rootfs
 mkdir -p bin dev etc home lib lib64 proc sbin sys tmp usr var
 mkdir -p usr/bin usr/lib usr/sbin
 mkdir -p var/log
@@ -88,7 +88,7 @@ cp -L $CROSS_COMPILE_SYS_ROOT/lib64/libresolv.so.2 $OUTDIR/rootfs/lib64
 cp -L $CROSS_COMPILE_SYS_ROOT/lib64/libc.so.6 $OUTDIR/rootfs/lib64
 
 # Make device nodes
-cd rootfs
+cd $OUTDIR/rootfs
 sudo mknod -m 666 dev/null c 1 3
 sudo mknod -m 666 dev/console c 5 1
 
