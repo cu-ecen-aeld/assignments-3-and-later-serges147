@@ -1,4 +1,4 @@
-# Makefile for the finder-app
+# Makefile for the aesdsocket
 
 # Compiler
 CC = gcc
@@ -15,7 +15,7 @@ SRCS = aesdsocket.c
 # Default target
 all: $(TARGET)
 
-# Build the writer application
+# Build the aesdsocket application
 $(TARGET): $(SRCS)
 	$(CROSS_COMPILE)$(CC) $(CFLAGS) -o $(TARGET) $(SRCS)
 
