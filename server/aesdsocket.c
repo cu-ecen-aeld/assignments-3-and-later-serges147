@@ -211,6 +211,6 @@ int main(const int argc, const char **const argv) {
     close(sock_fd);
     unlink(socket_data_file);
 
-    syslog(LOG_INFO, "Completed");
+    syslog(LOG_INFO, "Completed!");
     return 0;
 }
