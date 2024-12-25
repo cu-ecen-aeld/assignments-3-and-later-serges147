@@ -3,19 +3,24 @@
 
 #include "queue.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 
 #define SOCKET_DATA_FILE "/var/tmp/aesdsocketdata"
 
-struct main_thread_data {
+struct shared_info {
+    pthread_rwlock_t rw_file_lock;
 };
 
-struct client_thread_data {
+struct client_info {
+
     int peer_fd;
-    bool is_job_done;
-    SLIST_ENTRY(client_thread_data) entries;
+    pthread_t thread;
+    struct shared_info *shared;
+
+    TAILQ_ENTRY(client_info) nodes;
 };
 
-void process_client(const int peer_fd);
+void *process_client_thread(void *);
 
 #endif // AESDSOCKET_CLIENT_FLOW_H

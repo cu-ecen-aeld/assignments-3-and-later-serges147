@@ -15,9 +15,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-volatile sig_atomic_t g_running = 1;
+static volatile sig_atomic_t g_running = 1;
 
-void signal_handler(const int sig) {
+static void signal_handler(const int sig) {
 
     switch (sig) {
         case SIGINT:
@@ -29,7 +29,7 @@ void signal_handler(const int sig) {
     }
 }
 
-int open_aesd_socket() {
+static int open_aesd_socket() {
 
     // Build address data structure.
     //
@@ -89,13 +89,80 @@ int open_aesd_socket() {
     return sock_fd;
 }
 
-void run_server_logic(const int server_sock_fd) {
+TAILQ_HEAD(clients_s, client_info);
+
+static void start_client_processing(struct clients_s *clients, struct shared_info *shared, const int peer_fd) {
+
+    assert(clients != NULL);
+    assert(shared != NULL);
+    assert(peer_fd >= 0);
+
+    struct client_info *client = malloc(sizeof(struct client_info));
+    if (client == NULL) {
+        syslog(LOG_ERR, "malloc `client_info`: %s", strerror(errno));
+        close(peer_fd);
+        return;
+    }
+    memset(client, 0, sizeof(struct client_info));
+
+    client->shared = shared;
+    client->peer_fd = peer_fd;
+
+    if (0 != pthread_create(&client->thread, NULL, process_client_thread, client)) {
+        syslog(LOG_ERR, "pthread_create: %s", strerror(errno));
+        free(client);
+        close(peer_fd);
+    }
+
+    TAILQ_INSERT_TAIL(clients, client, nodes);
+}
+
+void join_completed_clients(struct clients_s *clients, const bool cancel) {
+
+    assert(clients != NULL);
+
+    struct client_info *client = NULL;
+    struct client_info *next = NULL;
+    TAILQ_FOREACH_SAFE(client, clients, nodes, next) {
+
+        if (cancel) {
+            pthread_cancel(client->thread);
+        }
+
+        if (cancel || (client->peer_fd < 0)) {
+
+            syslog(LOG_DEBUG, "Joining client thread (thread=%p)...", (const void*)client->thread);
+            pthread_join(client->thread, NULL);
+            syslog(LOG_DEBUG, "Joined the client thread (thread=%p).", (const void*)client->thread);
+
+            if (client->peer_fd >= 0) {
+                close(client->peer_fd);
+            }
+
+            TAILQ_REMOVE(clients, client, nodes);
+            free(client);
+        }
+    }
+}
+
+static void run_server_logic(const int server_sock_fd) {
+
+    assert(server_sock_fd >= 0);
 
     int res = listen(server_sock_fd, 1);
     if (res == -1) {
         syslog(LOG_ERR, "listen: %s", strerror(errno));
         return;
     }
+
+    struct shared_info shared;
+    if (pthread_rwlock_init(&shared.rw_file_lock, NULL) != 0) {
+        perror("pthread_rwlock_init");
+        exit(EXIT_FAILURE);
+    }
+
+    struct clients_s clients;
+    TAILQ_INIT(&clients);
 
     // The main loop.
     //
@@ -113,17 +180,26 @@ void run_server_logic(const int server_sock_fd) {
         res = getnameinfo((struct sockaddr *) &peer_addr, peer_addrlen, host, NI_MAXHOST, service, NI_MAXSERV,
                           NI_NUMERICSERV);
         if (res == 0) {
-            syslog(LOG_INFO, "Accepted connection from %s:%s", host, service);
-            process_client(peer_fd);
+
+            syslog(LOG_INFO, "Accepted connection from %s:%s (peer_fd=%d)", host, service, peer_fd);
+            start_client_processing(&clients, &shared, peer_fd);
+
         } else {
             syslog(LOG_WARNING, "getnameinfo: %s", gai_strerror(res));
+            close(peer_fd);
         }
-        close(peer_fd);
+
+        join_completed_clients(&clients, false);
     }
 
     if (g_running == 0) {
         syslog(LOG_INFO, "Caught signal, exiting");
     }
+
+    join_completed_clients(&clients, true);
+    assert(TAILQ_EMPTY(&clients));
+
+    pthread_rwlock_destroy(&shared.rw_file_lock);
 }
 
 int main(const int argc, const char **const argv) {
