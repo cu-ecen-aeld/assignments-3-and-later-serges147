@@ -1,6 +1,10 @@
+#include "client_flow.h"
+#include "queue.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -11,10 +15,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 1024
-
 volatile sig_atomic_t g_running = 1;
-const char *const socket_data_file = "/var/tmp/aesdsocketdata";
 
 void signal_handler(const int sig) {
 
@@ -88,61 +89,46 @@ int open_aesd_socket() {
     return sock_fd;
 }
 
-void reply_to_client(const int peer_fd) {
+void run_server_logic(const int server_sock_fd) {
 
-    FILE *file_to_read = fopen(socket_data_file, "r");
-    char buffer[BUFFER_SIZE];
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file_to_read)) > 0) {
-
-        send(peer_fd, buffer, bytes_read, 0);
-    }
-
-    fclose(file_to_read);
-}
-
-void process_client(const int peer_fd) {
-
-    FILE *file_to_append = fopen(socket_data_file, "a+");
-    if (file_to_append == NULL) {
-        syslog(LOG_ERR, "fopen '%s': %s", socket_data_file, strerror(errno));
+    int res = listen(server_sock_fd, 1);
+    if (res == -1) {
+        syslog(LOG_ERR, "listen: %s", strerror(errno));
         return;
     }
 
-    ssize_t bytes_read;
-    char buffer[BUFFER_SIZE + 1];
-    while ((bytes_read = recv(peer_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+    // The main loop.
+    //
+    while (g_running == 1) {
 
-        buffer[bytes_read] = '\0';
-        const char *start = buffer;
-
-        char *newline_pos;
-        while ((newline_pos = strchr(start, '\n')) != NULL) {
-
-            *newline_pos = '\0';
-            fputs(start, file_to_append);
-            fputc('\n', file_to_append);
-            fflush(file_to_append);
-            start = newline_pos + 1;
-
-            reply_to_client(peer_fd);
+        struct sockaddr_storage peer_addr;
+        socklen_t peer_addrlen = sizeof(peer_addr);
+        int peer_fd = accept(server_sock_fd, (struct sockaddr *) &peer_addr, &peer_addrlen);
+        if (peer_fd == -1) {
+            syslog(LOG_WARNING, "accept: %s", strerror(errno));
+            continue;
         }
-        if (*start != '\0') {
-            fputs(start, file_to_append);
+
+        char host[NI_MAXHOST], service[NI_MAXSERV];
+        res = getnameinfo((struct sockaddr *) &peer_addr, peer_addrlen, host, NI_MAXHOST, service, NI_MAXSERV,
+                          NI_NUMERICSERV);
+        if (res == 0) {
+            syslog(LOG_INFO, "Accepted connection from %s:%s", host, service);
+            process_client(peer_fd);
+        } else {
+            syslog(LOG_WARNING, "getnameinfo: %s", gai_strerror(res));
         }
+        close(peer_fd);
     }
 
-    if (bytes_read == -1) {
-        syslog(LOG_ERR, "recv: %s", strerror(errno));
+    if (g_running == 0) {
+        syslog(LOG_INFO, "Caught signal, exiting");
     }
-
-    fflush(file_to_append);
-    fclose(file_to_append);
 }
 
 int main(const int argc, const char **const argv) {
 
-    unlink(socket_data_file);
+    unlink(SOCKET_DATA_FILE);
 
     // Make sure we have socket open.
     //
@@ -176,40 +162,10 @@ int main(const int argc, const char **const argv) {
     sigaction(SIGINT, &sigbreak, NULL);
     sigaction(SIGTERM, &sigbreak, NULL);
 
-    // The main loop.
-    //
-    while (g_running == 1) {
-
-        int res = listen(sock_fd, 1);
-        if (res == -1) {
-            syslog(LOG_ERR, "listen: %s", strerror(errno));
-            break;
-        }
-
-        struct sockaddr_storage peer_addr;
-        socklen_t peer_addrlen = sizeof(peer_addr);
-        int peer_fd = accept(sock_fd, (struct sockaddr *) &peer_addr, &peer_addrlen);
-        if (peer_fd == -1) {
-            syslog(LOG_WARNING, "accept: %s", strerror(errno));
-            continue;
-        }
-
-        char host[NI_MAXHOST], service[NI_MAXSERV];
-        res = getnameinfo((struct sockaddr *) &peer_addr, peer_addrlen, host, NI_MAXHOST, service, NI_MAXSERV,
-                          NI_NUMERICSERV);
-        if (res == 0) {
-            syslog(LOG_INFO, "Accepted connection from %s:%s", host, service);
-            process_client(peer_fd);
-        } else {
-            syslog(LOG_WARNING, "getnameinfo: %s", gai_strerror(res));
-        }
-        close(peer_fd);
-    }
-    if (g_running == 0)
-        syslog(LOG_INFO, "Caught signal, exiting");
+    run_server_logic(sock_fd);
 
     close(sock_fd);
-    unlink(socket_data_file);
+    unlink(SOCKET_DATA_FILE);
 
     syslog(LOG_INFO, "Completed!");
     return 0;
