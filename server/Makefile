@@ -10,7 +10,7 @@ CFLAGS = -Wall -Werror -g
 TARGET = aesdsocket
 
 # Source files
-SRCS = aesdsocket.c client_flow.c
+SRCS = aesdsocket.c client_flow.c packet_fragment.c
 
 # Default target
 all: $(TARGET)

@@ -1,14 +1,14 @@
 #include "client_flow.h"
+#include "packet_fragment.h"
 
 #include "assert.h"
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
-#define BUFFER_SIZE 1024
 
 /// Atomically read the file and send it to the client.
 ///
@@ -37,47 +37,87 @@ static void reply_to_client(struct client_info *const client) {
     pthread_rwlock_unlock(&client->shared->rw_file_lock);
 }
 
+/// Atomically writes list of packet fragments to the file.
+///
+/// The list is freed as the fragments are written to the file -
+/// except the last fragment b/c it could be still reused.
+///
+static void write_new_packet(struct client_info *const client) {
+
+    assert(client != NULL);
+
+    pthread_rwlock_wrlock(&client->shared->rw_file_lock);
+
+    FILE *file_to_append = fopen(SOCKET_DATA_FILE, "a+");
+    if (file_to_append != NULL) {
+
+        struct packet_fragment *curr_fragment, *next_fragment;
+        for (curr_fragment = client->fragments; curr_fragment != NULL; curr_fragment = next_fragment) {
+
+            fwrite(curr_fragment->data, 1, curr_fragment->size, file_to_append);
+            next_fragment = curr_fragment->next;
+            if (next_fragment != NULL) {
+
+                free(curr_fragment);
+                client->fragments = next_fragment;
+            }
+        }
+
+        fflush(file_to_append);
+        fclose(file_to_append);
+
+    } else {
+        syslog(LOG_ERR, "fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
+    }
+
+    pthread_rwlock_unlock(&client->shared->rw_file_lock);
+
+    reply_to_client(client);
+}
+
 static void process_client(struct client_info *const client) {
 
     assert(client != NULL);
     assert(client->peer_fd >= 0);
     assert(client->shared != NULL);
+    assert(client->fragments == NULL);
 
-    FILE *file_to_append = fopen(SOCKET_DATA_FILE, "a+");
-    if (file_to_append == NULL) {
-        syslog(LOG_ERR, "fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
-        return;
-    }
+    client->fragments = packet_fragment_alloc();
+    struct packet_fragment *curr_fragment = client->fragments;
 
     ssize_t bytes_read;
-    char buffer[BUFFER_SIZE + 1];
-    while ((bytes_read = recv(client->peer_fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+    while ((bytes_read = recv(client->peer_fd, curr_fragment->buffer, sizeof(curr_fragment->buffer), 0)) > 0) {
 
-        buffer[bytes_read] = '\0';
-        const char *start = buffer;
+        curr_fragment->data = curr_fragment->buffer;
+        ssize_t bytes_left = bytes_read;
 
-        char *newline_pos;
-        while ((newline_pos = strchr(start, '\n')) != NULL) {
+        const char *newline_pos;
+        while (NULL != (newline_pos = memchr(curr_fragment->data, '\n', bytes_left))) {
 
-            *newline_pos = '\0';
-            fputs(start, file_to_append);
-            fputc('\n', file_to_append);
-            fflush(file_to_append);
-            start = newline_pos + 1;
+            curr_fragment->size = newline_pos - curr_fragment->data + 1;  // including \n
 
-            reply_to_client(client);
+            write_new_packet(client);
+            assert(client->fragments == curr_fragment);
+
+            bytes_left -= curr_fragment->size;
+            curr_fragment->data += curr_fragment->size;
         }
-        if (*start != '\0') {
-            fputs(start, file_to_append);
+
+        if (bytes_left > 0) {
+
+            curr_fragment->size = bytes_left;
+            curr_fragment->next = packet_fragment_alloc();
+            curr_fragment = curr_fragment->next;
         }
     }
+
+    // All done so we can free the fragments (instead of postponing it to the thread join).
+    packet_fragments_free(client->fragments);
+    client->fragments = NULL;
 
     if (bytes_read == -1) {
         syslog(LOG_ERR, "recv: %s", strerror(errno));
     }
-
-    fflush(file_to_append);
-    fclose(file_to_append);
 }
 
 void *process_client_thread(void *const arg) {

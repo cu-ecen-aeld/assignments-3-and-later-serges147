@@ -107,6 +107,7 @@ static void start_client_processing(struct clients_s *clients, struct shared_inf
 
     client->shared = shared;
     client->peer_fd = peer_fd;
+    client->fragments = NULL;
 
     if (0 != pthread_create(&client->thread, NULL, process_client_thread, client)) {
         syslog(LOG_ERR, "pthread_create: %s", strerror(errno));
@@ -135,9 +136,12 @@ void join_completed_clients(struct clients_s *clients, const bool cancel) {
             pthread_join(client->thread, NULL);
             syslog(LOG_DEBUG, "Joined the client thread (thread=%p).", (const void*)client->thread);
 
+            // Deallocate any leftovers (if any) from the client thread.
+            //
             if (client->peer_fd >= 0) {
                 close(client->peer_fd);
             }
+            packet_fragments_free(client->fragments);
 
             TAILQ_REMOVE(clients, client, nodes);
             free(client);
