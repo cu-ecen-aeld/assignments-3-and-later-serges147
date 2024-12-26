@@ -132,9 +132,9 @@ void join_completed_clients(struct clients_s *clients, const bool cancel) {
 
         if (cancel || (client->peer_fd < 0)) {
 
-            syslog(LOG_DEBUG, "Joining client thread (thread=%p)...", (const void*)client->thread);
+            syslog(LOG_DEBUG, "Joining client thread (thread=%p)...", (const void *) client->thread);
             pthread_join(client->thread, NULL);
-            syslog(LOG_DEBUG, "Joined the client thread (thread=%p).", (const void*)client->thread);
+            syslog(LOG_DEBUG, "Joined the client thread (thread=%p).", (const void *) client->thread);
 
             // Deallocate any leftovers (if any) from the client thread.
             //
@@ -147,6 +147,60 @@ void join_completed_clients(struct clients_s *clients, const bool cancel) {
             free(client);
         }
     }
+}
+
+static void timer_thread(union sigval sigval) {
+
+    struct shared_info *const shared = sigval.sival_ptr;
+    if (shared == NULL) {
+        syslog(LOG_ERR, "timer_thread: NULL argument");
+        return;
+    }
+
+    const time_t now = time(NULL);
+    const struct tm *const tm_info = localtime(&now);
+    char time_str[64];
+    strftime(time_str, sizeof(time_str), "%a, %d %b %Y %T %z", tm_info);
+
+    pthread_rwlock_wrlock(&shared->rw_file_lock);
+    {
+        FILE *const file_to_append = fopen(SOCKET_DATA_FILE, "a+");
+        if (file_to_append != NULL) {
+
+            fprintf(file_to_append, "timestamp:%s\n", time_str);
+            fflush(file_to_append);
+            fclose(file_to_append);
+
+        } else {
+            syslog(LOG_ERR, "timer_thread: fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
+        }
+    }
+    pthread_rwlock_unlock(&shared->rw_file_lock);
+}
+
+static timer_t setup_timer(struct shared_info *const shared) {
+
+    timer_t timer_id = NULL;
+
+    struct sigevent sev;
+    memset(&sev, 0, sizeof(struct sigevent));
+    sev.sigev_notify = SIGEV_THREAD;
+    sev.sigev_value.sival_ptr = shared;
+    sev.sigev_notify_function = timer_thread;
+    if (timer_create(CLOCK_MONOTONIC, &sev, &timer_id) == 0) {
+
+        struct itimerspec timer_spec;
+        memset(&timer_spec, 0, sizeof(struct itimerspec));
+        timer_spec.it_value.tv_sec = 10;
+        timer_spec.it_interval.tv_sec = 10;
+        if (timer_settime(timer_id, 0, &timer_spec, NULL) != 0) {
+            perror("timer_settime");
+        }
+    } else {
+        perror("timer_create");
+    }
+
+    return timer_id;
 }
 
 static void run_server_logic(const int server_sock_fd) {
@@ -164,6 +218,8 @@ static void run_server_logic(const int server_sock_fd) {
         perror("pthread_rwlock_init");
         exit(EXIT_FAILURE);
     }
+
+    const timer_t timer_id = setup_timer(&shared);
 
     struct clients_s clients;
     TAILQ_INIT(&clients);
@@ -199,6 +255,7 @@ static void run_server_logic(const int server_sock_fd) {
     if (g_running == 0) {
         syslog(LOG_INFO, "Caught signal, exiting");
     }
+    timer_delete(timer_id);
 
     join_completed_clients(&clients, true);
     assert(TAILQ_EMPTY(&clients));

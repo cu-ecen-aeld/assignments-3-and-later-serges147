@@ -20,20 +20,20 @@ static void reply_to_client(struct client_info *const client) {
     assert(client != NULL);
 
     pthread_rwlock_rdlock(&client->shared->rw_file_lock);
+    {
+        FILE *file_to_read = fopen(SOCKET_DATA_FILE, "r");
+        if (file_to_read != NULL) {
 
-    FILE *file_to_read = fopen(SOCKET_DATA_FILE, "r");
-    if (file_to_read != NULL) {
+            char buffer[BUFFER_SIZE];
+            size_t bytes_read;
+            while ((bytes_read = fread(buffer, 1, sizeof(buffer), file_to_read)) > 0) {
 
-        char buffer[BUFFER_SIZE];
-        size_t bytes_read;
-        while ((bytes_read = fread(buffer, 1, sizeof(buffer), file_to_read)) > 0) {
+                send(client->peer_fd, buffer, bytes_read, 0);
+            }
 
-            send(client->peer_fd, buffer, bytes_read, 0);
+            fclose(file_to_read);
         }
-
-        fclose(file_to_read);
     }
-
     pthread_rwlock_unlock(&client->shared->rw_file_lock);
 }
 
@@ -47,29 +47,29 @@ static void write_new_packet(struct client_info *const client) {
     assert(client != NULL);
 
     pthread_rwlock_wrlock(&client->shared->rw_file_lock);
+    {
+        FILE *file_to_append = fopen(SOCKET_DATA_FILE, "a+");
+        if (file_to_append != NULL) {
 
-    FILE *file_to_append = fopen(SOCKET_DATA_FILE, "a+");
-    if (file_to_append != NULL) {
+            struct packet_fragment *curr_fragment, *next_fragment;
+            for (curr_fragment = client->fragments; curr_fragment != NULL; curr_fragment = next_fragment) {
 
-        struct packet_fragment *curr_fragment, *next_fragment;
-        for (curr_fragment = client->fragments; curr_fragment != NULL; curr_fragment = next_fragment) {
+                fwrite(curr_fragment->data, 1, curr_fragment->size, file_to_append);
+                next_fragment = curr_fragment->next;
+                if (next_fragment != NULL) {
 
-            fwrite(curr_fragment->data, 1, curr_fragment->size, file_to_append);
-            next_fragment = curr_fragment->next;
-            if (next_fragment != NULL) {
-
-                free(curr_fragment);
-                client->fragments = next_fragment;
+                    free(curr_fragment);
+                    client->fragments = next_fragment;
+                }
             }
+
+            fflush(file_to_append);
+            fclose(file_to_append);
+
+        } else {
+            syslog(LOG_ERR, "fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
         }
-
-        fflush(file_to_append);
-        fclose(file_to_append);
-
-    } else {
-        syslog(LOG_ERR, "fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
     }
-
     pthread_rwlock_unlock(&client->shared->rw_file_lock);
 
     reply_to_client(client);
