@@ -29,10 +29,6 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Build the aesdsocket application
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRCS)
-
 # Clean up build files
 clean:
 	rm -f $(TARGET) $(OBJS)
