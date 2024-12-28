@@ -240,14 +240,11 @@ static void run_server_logic(const int server_sock_fd) {
         res = getnameinfo((struct sockaddr *) &peer_addr, peer_addrlen, host, NI_MAXHOST, service, NI_MAXSERV,
                           NI_NUMERICSERV);
         if (res == 0) {
-
             syslog(LOG_INFO, "Accepted connection from %s:%s (peer_fd=%d)", host, service, peer_fd);
-            start_client_processing(&clients, &shared, peer_fd);
-
         } else {
             syslog(LOG_WARNING, "getnameinfo: %s", gai_strerror(res));
-            close(peer_fd);
         }
+        start_client_processing(&clients, &shared, peer_fd);
 
         join_completed_clients(&clients, false);
     }
