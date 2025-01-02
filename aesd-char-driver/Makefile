@@ -1,6 +1,6 @@
 # See example Makefile from scull project
 # Comment/uncomment the following line to disable/enable debugging
-DEBUG = y
+# DEBUG = y
 
 # Add your debugging flag (or not) to CFLAGS
 ifeq ($(DEBUG),y)
@@ -21,7 +21,7 @@ KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PWD       := $(shell pwd)
 
 modules:
-	$(MAKE) CFLAGS_MODULE="-std=gnu11" -C $(KERNELDIR) M=$(PWD) modules
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 endif
 
