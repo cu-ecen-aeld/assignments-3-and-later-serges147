@@ -9,6 +9,7 @@ else
   DEBFLAGS = -O2
 endif
 
+CFLAGS += -std=c11
 EXTRA_CFLAGS += $(DEBFLAGS)
 
 ifneq ($(KERNELRELEASE),)

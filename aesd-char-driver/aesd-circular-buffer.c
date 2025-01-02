@@ -12,6 +12,7 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
+#include <asm-generic/bug.h>
 #define assert(expr) BUG_ON(!(expr))
 #else
 #include <assert.h>
