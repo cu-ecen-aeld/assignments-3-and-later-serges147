@@ -28,7 +28,7 @@
  * @return the struct aesd_buffer_entry structure representing the position described by char_offset, or
  * NULL if this position is not available in the buffer (not enough data is written).
  */
-struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(  //
+struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos( //
     struct aesd_circular_buffer *const buffer,
     const size_t char_offset,
     size_t *const entry_offset_byte_rtn)
@@ -47,19 +47,19 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(  //
     assert(!buf->full || (buf->in_offs == buf->out_offs));
 
     size_t size = (!buf->full && (buf->in_offs >= buf->out_offs))
-        ? (buf->in_offs - buf->out_offs)
-        : (buf->in_offs + AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - buf->out_offs);
+                      ? (buf->in_offs - buf->out_offs)
+                      : (buf->in_offs + AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - buf->out_offs);
 
     for (size_t offset = 0, index = buf->out_offs; size > 0; size--)
     {
         if (char_offset < (offset + buf->entry[index].size))
         {
             *entry_offset_byte_rtn = char_offset - offset;
-            return buffer->entry + index;  // this is the only place where I have to use original "mutable" buffer
+            return buffer->entry + index; // this is the only place where I have to use original "mutable" buffer
         }
-        
+
         offset += buf->entry[index].size;
-        
+
         index += 1;
         if (index == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
         {
@@ -77,7 +77,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(  //
  * Any necessary locking must be handled by the caller
  * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
  */
-void aesd_circular_buffer_add_entry(  //
+void aesd_circular_buffer_add_entry( //
     struct aesd_circular_buffer *const buffer,
     const struct aesd_buffer_entry *const add_entry)
 {
