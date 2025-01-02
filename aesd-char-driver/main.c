@@ -11,17 +11,19 @@
  *
  */
 
-#include <linux/module.h>
+#include "aesdchar.h"
+
+#include <linux/cdev.h>
+#include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/types.h>
-#include <linux/cdev.h>
-#include <linux/fs.h> // file_operations
-#include "aesdchar.h"
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
-MODULE_AUTHOR("Your Name Here"); /** TODO: fill in your name **/
+MODULE_AUTHOR("serges147");
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
@@ -65,6 +67,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
      */
     return retval;
 }
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
@@ -127,8 +130,6 @@ void aesd_cleanup_module(void)
 
     unregister_chrdev_region(devno, 1);
 }
-
-
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
