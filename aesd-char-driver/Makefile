@@ -9,7 +9,6 @@ else
   DEBFLAGS = -O2
 endif
 
-EXTRA_CFLAGS += -std=gnu11
 EXTRA_CFLAGS += $(DEBFLAGS)
 
 ifneq ($(KERNELRELEASE),)
@@ -22,7 +21,7 @@ KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PWD       := $(shell pwd)
 
 modules:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+	$(MAKE) CFLAGS_MODULE="-std=gnu11" -C $(KERNELDIR) M=$(PWD) modules
 
 endif
 
