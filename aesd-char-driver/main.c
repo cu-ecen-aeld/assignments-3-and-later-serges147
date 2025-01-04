@@ -98,9 +98,8 @@ static ssize_t aesd_read(struct file *const filp, char __user *const buf, const 
     return retval;
 }
 
-static ssize_t aesd_write(struct file *const filp, const char __user *const buf, const size_t count, loff_t *const f_pos)
+static ssize_t aesd_write(struct file *const filp, const char __user *const user_buf, const size_t count, loff_t *const f_pos)
 {
-    ssize_t retval = -ENOMEM;
     PDEBUG("write %zu bytes with offset %lld\n", count, *f_pos);
 
     if (count == 0)
@@ -111,41 +110,94 @@ static ssize_t aesd_write(struct file *const filp, const char __user *const buf,
     struct aesd_dev *const dev = filp->private_data;
     assert(dev);
 
-    int res = down_write_killable(&dev->lock);
-    if (res == 0)
+    char *kern_buf = NULL;
+    bool is_locked = false;
+    ssize_t retval = -ENOMEM;
+    struct aesd_buffer_entry evicted_entry = {.buffptr = NULL, .size = 0};
+    do
     {
-        const struct aesd_buffer_entry new_entry = {.buffptr = kmalloc(count, GFP_KERNEL), .size = count};
-        if (new_entry.buffptr)
+        // Allocate a new buffer and copy the data from the user
+        // even before acquiring the lock to minimize the locking time.
+        //
+        kern_buf = kmalloc(count, GFP_KERNEL);
+        if (!kern_buf)
         {
-            if (0 == copy_from_user(new_entry.buffptr, buf, count))
-            {
-                const struct aesd_buffer_entry evicted_entry = aesd_circular_buffer_add_entry( //
-                    &dev->buffer,
-                    &new_entry);
+            retval = -ENOMEM;
+            break;
+        }
+        if (copy_from_user(kern_buf, user_buf, count))
+        {
+            retval = -EFAULT;
+            break;
+        }
+        const bool newline_terminated = (kern_buf[count - 1] == '\n');
 
-                retval = count;
-                if (evicted_entry.buffptr)
-                {
-                    kfree(evicted_entry.buffptr);
-                }
-            }
-            else
+        // Lock the write access.
+        //
+        if (down_write_killable(&dev->lock))
+        {
+            retval = -EINTR;
+            break;
+        }
+        is_locked = true;
+
+        // Append the new buffer to the temporary one (if any).
+        //
+        if (dev->temp_entry.buffptr)
+        {
+            // Resize the temporary buffer to accommodate the new fragment.
+            //
+            const size_t new_size = dev->temp_entry.size + count;
+            char* const new_buffptr = krealloc(dev->temp_entry.buffptr, new_size, GFP_KERNEL);
+            if (!new_buffptr)
             {
-                kfree(new_entry.buffptr);
-                retval = -EFAULT;
+                retval = -ENOMEM;
+                break;
             }
+            
+            // Append (copy) the new fragment.
+            //
+            memcpy(new_buffptr + dev->temp_entry.size, kern_buf, count);
+            dev->temp_entry.size = new_size;
+            dev->temp_entry.buffptr = new_buffptr;
+            // `kern_buf` will be freed later.
         }
         else
         {
-            retval = -ENOMEM;
+            // Store (move) the new fragment.
+            //
+            dev->temp_entry.size = count;
+            dev->temp_entry.buffptr = kern_buf;
+            kern_buf = NULL;
+        }
+        retval = count;
+
+        if (newline_terminated)
+        {
+            evicted_entry = aesd_circular_buffer_add_entry(&dev->buffer, &dev->temp_entry);
+            dev->temp_entry.size = 0;
+            dev->temp_entry.buffptr = NULL;
         }
 
-        up_write(&dev->lock);
-    }
-    else
+    } while (0);
+
+    if (is_locked)
     {
-        retval = -EINTR;
+        up_write(&dev->lock);
+        is_locked = false;
     }
+    if (evicted_entry.buffptr)
+    {
+        kfree(evicted_entry.buffptr);
+        evicted_entry.size = 0;
+        evicted_entry.buffptr = NULL;
+    }
+    if (kern_buf)
+    {
+        kfree(kern_buf);
+        kern_buf = NULL;
+    }
+
     return retval;
 }
 
@@ -187,6 +239,8 @@ static int __init aesd_init_module(void)
     memset(&aesd_device, 0, sizeof(struct aesd_dev));
 
     init_rwsem(&aesd_device.lock);
+    aesd_device.temp_entry.size = 0;
+    aesd_device.temp_entry.buffptr = NULL;
     aesd_circular_buffer_init(&aesd_device.buffer);
 
     result = aesd_setup_cdev(&aesd_device);
@@ -216,6 +270,12 @@ static void __exit aesd_cleanup_module(void)
             entryptr->buffptr = NULL;
             entryptr->size = 0;
         }
+    }
+    if (aesd_device.temp_entry.buffptr)
+    {
+        kfree(aesd_device.temp_entry.buffptr);
+        aesd_device.temp_entry.size = 0;
+        aesd_device.temp_entry.buffptr = NULL;
     }
 
     unregister_chrdev_region(devno, 1);

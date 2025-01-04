@@ -30,9 +30,10 @@
 
 struct aesd_dev
 {
-     struct rw_semaphore lock;     /* read/write semaphore     */
-     struct aesd_circular_buffer buffer; /* Buffer to store data */
-     struct cdev cdev; /* Char device structure      */
+     struct cdev cdev;
+     struct rw_semaphore lock;
+     struct aesd_circular_buffer buffer;
+     struct aesd_buffer_entry temp_entry;
 };
 
 #endif /* AESD_CHAR_DRIVER_AESDCHAR_H_ */
