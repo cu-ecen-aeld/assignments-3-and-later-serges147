@@ -12,10 +12,7 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
-#include <asm-generic/bug.h>
-#define assert(expr) BUG_ON(!(expr))
 #else
-#include <assert.h>
 #include <string.h>
 #endif
 
@@ -78,19 +75,25 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos( //
  * Any necessary locking must be handled by the caller
  * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
  */
-void aesd_circular_buffer_add_entry( //
+struct aesd_buffer_entry aesd_circular_buffer_add_entry( //
     struct aesd_circular_buffer *const buffer,
-    const struct aesd_buffer_entry *const add_entry)
+    const struct aesd_buffer_entry *const new_entry)
 {
+    struct aesd_buffer_entry evicted_entry = {.buffptr = NULL, .size = 0};
     if (buffer == NULL)
     {
-        return;
+        return evicted_entry;
     }
     assert(buffer->in_offs < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED);
     assert(buffer->out_offs < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED);
     assert(!buffer->full || (buffer->in_offs == buffer->out_offs));
 
-    buffer->entry[buffer->in_offs] = *add_entry;
+    if (buffer->full)
+    {
+        evicted_entry = buffer->entry[buffer->in_offs];
+    }
+
+    buffer->entry[buffer->in_offs] = *new_entry;
     buffer->in_offs += 1;
     if (buffer->in_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
     {
@@ -105,6 +108,8 @@ void aesd_circular_buffer_add_entry( //
     {
         buffer->full = true;
     }
+
+    return evicted_entry;
 }
 
 /**

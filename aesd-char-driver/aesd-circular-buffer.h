@@ -10,7 +10,10 @@
 
 #ifdef __KERNEL__
 #include <linux/types.h>
+#include <asm/bug.h>
+#define assert(expr) BUG_ON(!(expr))
 #else
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h> // size_t
 #include <stdint.h> // uintx_t
@@ -23,7 +26,7 @@ struct aesd_buffer_entry
     /**
      * A location where the buffer contents in buffptr are stored
      */
-    const char *buffptr;
+    char *buffptr;
     /**
      * Number of bytes stored in buffptr
      */
@@ -56,9 +59,9 @@ extern struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos
     const size_t char_offset,
     size_t *const entry_offset_byte_rtn);
 
-extern void aesd_circular_buffer_add_entry( //
+extern struct aesd_buffer_entry aesd_circular_buffer_add_entry( //
     struct aesd_circular_buffer *const buffer,
-    const struct aesd_buffer_entry *const add_entry);
+    const struct aesd_buffer_entry *const new_entry);
 
 extern void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer);
 
