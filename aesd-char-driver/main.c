@@ -34,7 +34,7 @@ struct aesd_dev aesd_device;
 
 static int aesd_open(struct inode *const inode, struct file *const filp)
 {
-    PDEBUG("open");
+    PDEBUG("open\n");
 
     struct aesd_dev *const dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
     filp->private_data = dev;
@@ -43,14 +43,14 @@ static int aesd_open(struct inode *const inode, struct file *const filp)
 
 static int aesd_release(struct inode *const inode, struct file *const filp)
 {
-    PDEBUG("release");
+    PDEBUG("release\n");
     return 0;
 }
 
 static ssize_t aesd_read(struct file *const filp, char __user *const buf, const size_t count, loff_t *const f_pos)
 {
     ssize_t retval = 0;
-    PDEBUG("read %zu bytes with offset %lld", count, *f_pos);
+    PDEBUG("read %zu bytes with offset %lld\n", count, *f_pos);
 
     if (count == 0)
     {
@@ -101,7 +101,7 @@ static ssize_t aesd_read(struct file *const filp, char __user *const buf, const 
 static ssize_t aesd_write(struct file *const filp, const char __user *const buf, const size_t count, loff_t *const f_pos)
 {
     ssize_t retval = -ENOMEM;
-    PDEBUG("write %zu bytes with offset %lld", count, *f_pos);
+    PDEBUG("write %zu bytes with offset %lld\n", count, *f_pos);
 
     if (count == 0)
     {
@@ -174,6 +174,8 @@ static int aesd_setup_cdev(struct aesd_dev *const dev)
 
 static int __init aesd_init_module(void)
 {
+    PDEBUG("init\n");
+
     dev_t dev = 0;
     int result = alloc_chrdev_region(&dev, aesd_minor, 1, "aesdchar");
     aesd_major = MAJOR(dev);
@@ -198,6 +200,8 @@ static int __init aesd_init_module(void)
 
 static void __exit aesd_cleanup_module(void)
 {
+    PDEBUG("exit\n");
+
     const dev_t devno = MKDEV(aesd_major, aesd_minor);
 
     cdev_del(&aesd_device.cdev);
