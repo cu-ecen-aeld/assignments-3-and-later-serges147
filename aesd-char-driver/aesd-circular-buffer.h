@@ -26,7 +26,7 @@ struct aesd_buffer_entry
     /**
      * A location where the buffer contents in buffptr are stored
      */
-    char *buffptr;
+    const char *buffptr;
     /**
      * Number of bytes stored in buffptr
      */
@@ -64,6 +64,12 @@ extern struct aesd_buffer_entry aesd_circular_buffer_add_entry( //
     const struct aesd_buffer_entry *const new_entry);
 
 extern void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer);
+
+/// Gets the number of entries in the circular buffer.
+extern size_t aesd_circular_buffer_size(const struct aesd_circular_buffer *const buffer);
+
+/// Gets the total number of bytes in the circular buffer.
+extern size_t aesd_circular_buffer_bytes_size(const struct aesd_circular_buffer *const buffer);
 
 /**
  * Create a for loop to iterate over each member of the circular buffer.

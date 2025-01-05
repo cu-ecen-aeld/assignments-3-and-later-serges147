@@ -12,6 +12,7 @@
  */
 
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
 #include "aesd-circular-buffer.h"
 
 #include <linux/cdev.h>
@@ -148,13 +149,13 @@ static ssize_t aesd_write(struct file *const filp, const char __user *const user
             // Resize the temporary buffer to accommodate the new fragment.
             //
             const size_t new_size = dev->temp_entry.size + count;
-            char* const new_buffptr = krealloc(dev->temp_entry.buffptr, new_size, GFP_KERNEL);
+            char *const new_buffptr = krealloc(dev->temp_entry.buffptr, new_size, GFP_KERNEL);
             if (!new_buffptr)
             {
                 retval = -ENOMEM;
                 break;
             }
-            
+
             // Append (copy) the new fragment.
             //
             memcpy(new_buffptr + dev->temp_entry.size, kern_buf, count);
@@ -171,6 +172,7 @@ static ssize_t aesd_write(struct file *const filp, const char __user *const user
             kern_buf = NULL;
         }
         retval = count;
+        *f_pos += count;
 
         if (newline_terminated)
         {
@@ -201,12 +203,56 @@ static ssize_t aesd_write(struct file *const filp, const char __user *const user
     return retval;
 }
 
+static long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    int retval = 0;
+
+    switch (cmd)
+    {
+    case AESDCHAR_IOCSEEKTO:
+        
+        struct aesd_seekto seekto;
+        if (!access_ok((void __user *)arg, _IOC_SIZE(cmd)))
+        {
+            return -EFAULT;
+        }
+        if (copy_from_user(&seekto, (void __user *)arg, _IOC_SIZE(cmd)))
+        {
+            return -EFAULT;
+        }
+        break;
+
+    default:
+        return -EINVAL;
+    }
+    
+    return retval;
+}
+
+static loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
+{
+	struct aesd_dev *const dev = filp->private_data;
+    assert(dev);
+
+    if (down_write_killable(&dev->lock))
+    {
+        return -EINTR;
+    }
+    const size_t buffer_bytes_size = aesd_circular_buffer_bytes_size(&dev->buffer);
+
+    up_write(&dev->lock);
+
+    return fixed_size_llseek(filp, offset, whence, buffer_bytes_size);
+}    
+
 struct file_operations aesd_fops = {
     .owner = THIS_MODULE,
     .read = aesd_read,
     .write = aesd_write,
     .open = aesd_open,
     .release = aesd_release,
+    .unlocked_ioctl = aesd_ioctl,
+    .llseek = aesd_llseek,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *const dev)
