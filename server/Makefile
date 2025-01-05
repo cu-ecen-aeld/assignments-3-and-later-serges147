@@ -4,7 +4,8 @@
 CC ?= $(CROSS_COMPILE)gcc
 
 # Compiler flags
-CFLAGS ?= -g -Wall -Werror -I../aesd-char-driver
+CFLAGS ?= -g -Wall -Werror
+CFLAGS += -I../aesd-char-driver
 
 # Linker flags
 LDFLAGS ?= -lpthread -lrt
