@@ -5,7 +5,6 @@ CC ?= $(CROSS_COMPILE)gcc
 
 # Compiler flags
 CFLAGS ?= -g -Wall -Werror
-CFLAGS += -I../aesd-char-driver
 
 # Linker flags
 LDFLAGS ?= -lpthread -lrt
@@ -28,7 +27,7 @@ $(TARGET): $(OBJS)
 
 # Compile source files into object files
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -I../aesd-char-driver -c $< -o $@
 
 # Clean up build files
 clean:
