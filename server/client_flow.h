@@ -17,18 +17,20 @@
 #define SOCKET_DATA_FILE "/var/tmp/aesdsocketdata"
 #endif
 
-struct shared_info {
+struct shared_info
+{
     pthread_rwlock_t rw_file_lock;
 };
 
-struct client_info {
-
+struct client_info
+{
     int peer_fd;
     pthread_t thread;
     struct shared_info *shared;
     struct packet_fragment *fragments;
 
-    TAILQ_ENTRY(client_info) nodes;
+    TAILQ_ENTRY(client_info)
+    nodes;
 };
 
 void *process_client_thread(void *);

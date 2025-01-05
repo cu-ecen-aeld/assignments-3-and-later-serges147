@@ -5,12 +5,12 @@
 
 #define BUFFER_SIZE 4
 
-struct packet_fragment {
-
+struct packet_fragment
+{
     struct packet_fragment *next;
 
-    size_t size;  // The size of the data in the buffer.
-    const char *data;  // The offset of the data in the buffer.
+    size_t size;      // The size of the data in the buffer.
+    const char *data; // The offset of the data in the buffer.
     char buffer[BUFFER_SIZE];
 };
 
