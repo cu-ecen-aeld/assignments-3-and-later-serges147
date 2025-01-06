@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#define BUFFER_SIZE 4
+#define BUFFER_SIZE 4096
 
 struct packet_fragment
 {
