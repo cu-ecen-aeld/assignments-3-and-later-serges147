@@ -113,6 +113,14 @@ static void start_client_processing(struct clients_s *clients, struct shared_inf
     client->shared = shared;
     client->peer_fd = peer_fd;
     client->fragments = NULL;
+    client->file = fopen(SOCKET_DATA_FILE, "a+");
+    if (client->file == NULL)
+    {
+        syslog(LOG_ERR, "fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
+        free(client);
+        close(peer_fd);
+        return;
+    }
 
     if (0 != pthread_create(&client->thread, NULL, process_client_thread, client))
     {
@@ -150,6 +158,10 @@ void join_completed_clients(struct clients_s *clients, const bool cancel)
                 close(client->peer_fd);
             }
             packet_fragments_free(client->fragments);
+            if (client->file != NULL)
+            {
+                fclose(client->file);
+            }
 
             TAILQ_REMOVE(clients, client, nodes);
             free(client);

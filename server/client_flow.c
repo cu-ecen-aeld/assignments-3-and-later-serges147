@@ -20,20 +20,15 @@
 static void reply_to_client(struct client_info *const client)
 {
     assert(client != NULL);
+    assert(client->file != NULL);
 
     pthread_rwlock_rdlock(&client->shared->rw_file_lock);
     {
-        FILE *file_to_read = fopen(SOCKET_DATA_FILE, "r");
-        if (file_to_read != NULL)
+        char buffer[BUFFER_SIZE];
+        size_t bytes_read;
+        while ((bytes_read = fread(buffer, 1, sizeof(buffer), client->file)) > 0)
         {
-            char buffer[BUFFER_SIZE];
-            size_t bytes_read;
-            while ((bytes_read = fread(buffer, 1, sizeof(buffer), file_to_read)) > 0)
-            {
-                send(client->peer_fd, buffer, bytes_read, 0);
-            }
-
-            fclose(file_to_read);
+            send(client->peer_fd, buffer, bytes_read, 0);
         }
     }
     pthread_rwlock_unlock(&client->shared->rw_file_lock);
@@ -83,6 +78,7 @@ static char *flatten_fragments(struct client_info *const client, size_t *const s
 static void write_new_packet(struct client_info *const client)
 {
     assert(client != NULL);
+    assert(client->file != NULL);
 
     size_t flat_size = 0;
     char *const flat_data = flatten_fragments(client, &flat_size);
@@ -97,23 +93,22 @@ static void write_new_packet(struct client_info *const client)
 
         pthread_rwlock_wrlock(&client->shared->rw_file_lock);
         {
-            FILE *file_to_append = fopen(SOCKET_DATA_FILE, "a+");
-            if (file_to_append != NULL)
+            if (params == 2)
             {
-                if (params == 2)
-                {
-                    ioctl(fileno(file_to_append), AESDCHAR_IOCSEEKTO, &seekto);
-                }
-                else
-                {
-                    fwrite(flat_data, 1, flat_size, file_to_append);
-                    fflush(file_to_append);
-                }
-                fclose(file_to_append);
+                syslog(LOG_DEBUG, "AESDCHAR_IOCSEEKTO:%u,%u", //
+                    seekto.write_cmd, seekto.write_cmd_offset);                
+                
+                ioctl(fileno(client->file), AESDCHAR_IOCSEEKTO, &seekto);
             }
             else
             {
-                syslog(LOG_ERR, "fopen '%s': %s", SOCKET_DATA_FILE, strerror(errno));
+                fwrite(flat_data, 1, flat_size, client->file);
+                fflush(client->file);
+
+                #if !USE_AESD_CHAR_DEVICE
+                // prepare for the next read from the beginning
+                fseek(client->file, 0, SEEK_SET);
+                #endif
             }
         }
         pthread_rwlock_unlock(&client->shared->rw_file_lock);

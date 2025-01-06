@@ -6,6 +6,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #ifndef USE_AESD_CHAR_DEVICE
 #define USE_AESD_CHAR_DEVICE 1
@@ -28,9 +29,9 @@ struct client_info
     pthread_t thread;
     struct shared_info *shared;
     struct packet_fragment *fragments;
+    FILE *file;
 
-    TAILQ_ENTRY(client_info)
-    nodes;
+    TAILQ_ENTRY(client_info) nodes;
 };
 
 void *process_client_thread(void *);

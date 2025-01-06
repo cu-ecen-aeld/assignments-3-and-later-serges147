@@ -172,7 +172,9 @@ static ssize_t aesd_write(struct file *const filp, const char __user *const user
             kern_buf = NULL;
         }
         retval = count;
-        *f_pos += count;
+
+        // We ignore file position for writes to our device.
+        // *f_pos += count;
 
         if (newline_terminated)
         {
