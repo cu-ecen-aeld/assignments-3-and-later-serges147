@@ -142,3 +142,39 @@ size_t aesd_circular_buffer_bytes_size(const struct aesd_circular_buffer *const 
     }
     return bytes;
 }
+
+bool aesd_circular_buffer_offset_at(
+    const struct aesd_circular_buffer *const buffer,
+    const size_t entry_index,
+    const size_t entry_offset,
+    size_t *const offset_rtn)
+{
+    assert(offset_rtn);
+
+    const size_t size = aesd_circular_buffer_size(buffer);
+    if (entry_index >= size)
+    {
+        // Early return if the entry index is out of bounds.
+        return false;
+    }
+
+    size_t global_offset = 0, out_offs = buffer->out_offs;
+    for (size_t index = 0; index < entry_index; ++index)
+    {
+        global_offset += buffer->entry[out_offs].size;
+
+        out_offs += 1;
+        if (out_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
+        {
+            out_offs = 0;
+        }
+    }
+
+    if (entry_offset >= buffer->entry[out_offs].size)
+    {
+        return false;
+    }
+
+    *offset_rtn = global_offset + entry_offset;
+    return true;
+}

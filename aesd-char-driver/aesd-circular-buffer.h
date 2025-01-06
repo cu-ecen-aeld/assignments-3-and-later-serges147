@@ -71,6 +71,14 @@ extern size_t aesd_circular_buffer_size(const struct aesd_circular_buffer *const
 /// Gets the total number of bytes in the circular buffer.
 extern size_t aesd_circular_buffer_bytes_size(const struct aesd_circular_buffer *const buffer);
 
+/// Gets global offset of the specified entry in the circular buffer.
+/// Returns false if the entry index or its offset is out of bounds.
+extern bool aesd_circular_buffer_offset_at( //
+    const struct aesd_circular_buffer *const buffer,
+    const size_t entry_index,
+    const size_t entry_offset,
+    size_t *const offset_rtn);
+
 /**
  * Create a for loop to iterate over each member of the circular buffer.
  * Useful when you've allocated memory for circular buffer entries and need to free it

@@ -88,8 +88,12 @@ static void write_new_packet(struct client_info *const client)
     char *const flat_data = flatten_fragments(client, &flat_size);
     if (flat_data != NULL)
     {
+        assert(flat_size > 0);
+        assert(flat_data[flat_size - 1] == '\n');
         struct aesd_seekto seekto = {0, 0};
+        flat_data[flat_size - 1] = '\0'; // null-terminate the string
         const int params = sscanf(flat_data, "AESDCHAR_IOCSEEKTO:%u,%u", &seekto.write_cmd, &seekto.write_cmd_offset);
+        flat_data[flat_size - 1] = '\n'; // restore the newline
 
         pthread_rwlock_wrlock(&client->shared->rw_file_lock);
         {

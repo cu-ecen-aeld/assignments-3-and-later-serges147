@@ -205,13 +205,20 @@ static ssize_t aesd_write(struct file *const filp, const char __user *const user
 
 static long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
+    struct aesd_dev *const dev = filp->private_data;
+    assert(dev);
+
     int retval = 0;
 
     switch (cmd)
     {
     case AESDCHAR_IOCSEEKTO:
-        
+
         struct aesd_seekto seekto;
+        if (_IOC_SIZE(cmd) != sizeof(seekto))
+        {
+            return -EINVAL;
+        }
         if (!access_ok((void __user *)arg, _IOC_SIZE(cmd)))
         {
             return -EFAULT;
@@ -220,18 +227,36 @@ static long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         {
             return -EFAULT;
         }
+
+        if (down_write_killable(&dev->lock))
+        {
+            return -EINTR;
+        }
+        {
+            size_t seek_offset;
+            if (aesd_circular_buffer_offset_at(&dev->buffer, seekto.write_cmd, seekto.write_cmd_offset, &seek_offset))
+            {
+                filp->f_pos = seek_offset;
+                retval = 0;
+            }
+            else
+            {
+                retval = -EINVAL;
+            }
+        }
+        up_write(&dev->lock);
         break;
 
     default:
         return -EINVAL;
     }
-    
+
     return retval;
 }
 
 static loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
 {
-	struct aesd_dev *const dev = filp->private_data;
+    struct aesd_dev *const dev = filp->private_data;
     assert(dev);
 
     if (down_write_killable(&dev->lock))
@@ -243,7 +268,7 @@ static loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
     up_write(&dev->lock);
 
     return fixed_size_llseek(filp, offset, whence, buffer_bytes_size);
-}    
+}
 
 struct file_operations aesd_fops = {
     .owner = THIS_MODULE,
