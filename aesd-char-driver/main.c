@@ -227,6 +227,7 @@ static long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         {
             return -EFAULT;
         }
+        PDEBUG("AESDCHAR_IOCSEEKTO:%u,%u\n", seekto.write_cmd, seekto.write_cmd_offset);
 
         if (down_write_killable(&dev->lock))
         {
@@ -236,6 +237,7 @@ static long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             size_t seek_offset;
             if (aesd_circular_buffer_offset_at(&dev->buffer, seekto.write_cmd, seekto.write_cmd_offset, &seek_offset))
             {
+                PDEBUG("AESDCHAR_IOCSEEKTO result=%zu\n", seek_offset);
                 filp->f_pos = seek_offset;
                 retval = 0;
             }
